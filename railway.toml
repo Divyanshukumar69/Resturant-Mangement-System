@@ -1,0 +1,7 @@
+[build]
+nixpkgs = ["nodejs_20", "python3", "pkg-config", "cairo", "pixman"]
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
