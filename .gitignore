@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+dist-server/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# SQLite database (lives on server volume, never commit)
+*.db
+*.db-shm
+*.db-wal
+
+# Vite optimized cache
+node_modules/.vite/
