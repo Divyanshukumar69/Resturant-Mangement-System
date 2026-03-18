@@ -7,7 +7,7 @@ interface AuthContextType {
   role: Role | null;
   restaurantId: number | null;
   login: (token: string, role: Role, restaurantId: number) => void;
-  logout: () => void;
+  logout: (details?: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   restaurantId: null,
   login: () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
 export function useAuth() {
@@ -38,13 +38,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRestaurantId(newRestaurantId);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    localStorage.removeItem('restaurantId');
-    setToken(null);
-    setRole(null);
-    setRestaurantId(null);
+  const logout = async (details?: any) => {
+    try {
+      if (token) {
+        await fetch('/api/logout', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ details })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to log logout activity:', err);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      localStorage.removeItem('restaurantId');
+      setToken(null);
+      setRole(null);
+      setRestaurantId(null);
+    }
   };
 
   return (

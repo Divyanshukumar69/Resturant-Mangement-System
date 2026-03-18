@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Loader2, ChefHat, Utensils, Volume2, X } from 'lucide-react';
+import { CheckCircle, Loader2, ChefHat, Utensils, Volume2, X, LogOut } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Order, OrderItem } from '../types';
 
@@ -26,7 +26,7 @@ const initAudio = async () => {
 
 export default function KitchenDashboard() {
   const socket = useSocket();
-  const { token, restaurantId } = useAuth();
+  const { token, restaurantId, logout } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const announcedOrders = useRef<Set<number>>(new Set());
@@ -209,6 +209,12 @@ export default function KitchenDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+             <button 
+                onClick={() => logout({ dashboard: 'kitchen' })}
+                className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-3 rounded-2xl flex items-center gap-2 transition-all font-bold text-xs uppercase tracking-widest mr-2"
+              >
+                <LogOut className="w-4 h-4" /> Logout
+              </button>
              {!soundEnabled ? (
                 <button 
                   onClick={enableAudio}

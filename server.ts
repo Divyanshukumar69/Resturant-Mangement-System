@@ -143,7 +143,31 @@ async function startServer() {
     }
 
     const token = jwt.sign({ id: user.id, role: user.role, restaurant_id: user.restaurant_id }, JWT_SECRET, { expiresIn: '12h' });
+    
+    // Log login activity
+    try {
+      db.prepare('INSERT INTO activity_logs (user_id, action, details) VALUES (?, ?, ?)').run(user.id, 'login', JSON.stringify({ ip: req.ip }));
+    } catch (err) {
+      console.error('Failed to log login:', err);
+    }
+
     res.json({ token, role: user.role, restaurant_id: user.restaurant_id });
+  });
+
+  // Logout
+  app.post('/api/logout', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+    if (!req.user) return res.sendStatus(401);
+    const { details } = req.body;
+    try {
+      db.prepare('INSERT INTO activity_logs (user_id, action, details) VALUES (?, ?, ?)').run(
+        req.user.id,
+        'logout',
+        details ? JSON.stringify(details) : null
+      );
+      res.json({ success: true });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message });
+    }
   });
 
   // Public: Add Customer from Landing Page

@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { AddTableModal } from '../components/AddTableModal';
 import QRCode from 'qrcode';
-import { Download, Edit, Plus, Tag, ToggleLeft, ToggleRight, Star, Clock, Lock, History, Store, UserCog, Check, LayoutDashboard, UtensilsCrossed, Percent, Settings, Table as TableIcon, X, Upload, Wand2, Loader2, Trash2 } from 'lucide-react';
+import { Download, Edit, Plus, Tag, ToggleLeft, ToggleRight, Star, Clock, Lock, History, Store, UserCog, Check, LayoutDashboard, UtensilsCrossed, Percent, Settings, Table as TableIcon, X, Upload, Wand2, Loader2, Trash2, LogOut } from 'lucide-react';
 import { Table, MenuItem, Discount, Order } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -241,7 +241,7 @@ const AddMenuItemModal = ({ onClose, onSave, token, initialData }: { onClose: ()
 type TabId = 'tables' | 'menu' | 'discounts' | 'history' | 'settings' | 'marketing' | 'analytics';
 
 export default function AdminDashboard() {
-  const { token, restaurantId } = useAuth();
+  const { token, restaurantId, logout } = useAuth();
   const socket = useSocket();
   const [tables, setTables] = useState<Table[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -548,6 +548,13 @@ export default function AdminDashboard() {
               </button>
             ))}
           </div>
+
+          <button 
+            onClick={() => logout({ dashboard: 'admin' })}
+            className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-2 rounded-xl flex items-center gap-2 transition-all font-bold text-sm tracking-tight"
+          >
+            <LogOut className="w-4 h-4" /> Logout
+          </button>
         </div>
       </div>
 

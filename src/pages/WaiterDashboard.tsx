@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { Table, MenuItem, Category } from '../types';
-import { ShoppingCart, Plus, Minus, Search, CheckCircle2 } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Search, CheckCircle2, LogOut } from 'lucide-react';
 
 export default function WaiterDashboard() {
-  const { token, restaurantId } = useAuth();
+  const { token, restaurantId, logout } = useAuth();
   const [tables, setTables] = useState<Table[]>([]);
   const [menu, setMenu] = useState<Category[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
@@ -77,7 +77,12 @@ export default function WaiterDashboard() {
       body: JSON.stringify({
         restaurantId,
         tableId: selectedTable.id,
-        items: cart.map(c => ({ id: c.item.id, quantity: c.quantity })),
+        items: cart.map(c => ({ 
+          id: c.item.id, 
+          quantity: c.quantity,
+          price: c.item.price,
+          name: c.item.name 
+        })),
         customerNickname: 'Waiter Order'
       })
     });
@@ -99,7 +104,15 @@ export default function WaiterDashboard() {
       {/* Left Side: Tables & Menu */}
       <div className="flex-1 flex flex-col gap-6">
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Select Table</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Select Table</h2>
+            <button 
+              onClick={() => logout({ dashboard: 'waiter' })}
+              className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-2 rounded-xl flex items-center gap-2 transition-all font-bold text-xs uppercase tracking-widest"
+            >
+              <LogOut className="w-4 h-4" /> Logout
+            </button>
+          </div>
           <div className="flex gap-4 overflow-x-auto pb-2">
             {tables.map(table => (
               <button

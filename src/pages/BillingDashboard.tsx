@@ -2,13 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IndianRupee, Printer, X, Banknote, QrCode, Ticket, Tag, Loader2 } from 'lucide-react';
+import { IndianRupee, Printer, X, Banknote, QrCode, Ticket, Tag, Loader2, LogOut } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Order, OrderItem } from '../types';
 
 export default function BillingDashboard() {
   const socket = useSocket();
-  const { token, restaurantId } = useAuth();
+  const { token, restaurantId, logout } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -306,6 +306,12 @@ export default function BillingDashboard() {
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Live Sync Active</span>
                </div>
+               <button 
+                  onClick={() => logout({ dashboard: 'billing' })}
+                  className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-3 rounded-2xl flex items-center gap-2 transition-all font-bold text-xs uppercase tracking-widest"
+                >
+                  <LogOut className="w-4 h-4" /> Logout
+                </button>
             </div>
         </div>
 
