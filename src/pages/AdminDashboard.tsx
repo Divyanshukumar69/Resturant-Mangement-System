@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { AddTableModal } from '../components/AddTableModal';
 import QRCode from 'qrcode';
-import { Download, Edit, Plus, Tag, ToggleLeft, ToggleRight, Star, Clock, Lock, History, Store, UserCog, Check, LayoutDashboard, UtensilsCrossed, Percent, Settings, Table as TableIcon, X, Upload, Wand2, Loader2, Trash2, LogOut } from 'lucide-react';
+import { Download, Edit, Plus, Tag, ToggleLeft, ToggleRight, Star, Clock, Lock, History, Store, UserCog, Check, LayoutDashboard, UtensilsCrossed, Percent, Settings, Table as TableIcon, X, Upload, Wand2, Loader2, Trash2, LogOut, Sparkles } from 'lucide-react';
 import { Table, MenuItem, Discount, Order } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -57,21 +57,22 @@ const AddMenuItemModal = ({ onClose, onSave, token, initialData }: { onClose: ()
           
           const prompt = "Analyze this image. If it's a food item, extract its likely name, a short appetizing description, a category (e.g., Starter, Main Course, Dessert, Beverage), and an estimated price in INR (just the number). Return ONLY a JSON object with keys: name, description, category_name, price.";
           
-          const imagePart = {
-            inlineData: {
-              data: base64String.split(',')[1],
-              mimeType: file.type
-            }
-          };
-
           const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: {
-              parts: [
-                { text: prompt },
-                imagePart
-              ]
-            }
+            model: "gemini-1.5-flash",
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      data: base64String.split(',')[1],
+                      mimeType: file.type
+                    }
+                  }
+                ]
+              }
+            ]
           });
           
           const text = response.text;
@@ -322,7 +323,9 @@ export default function AdminDashboard() {
   const [historyData, setHistoryData] = useState<{orders: Order[], totalSales: number, totalOrders: number}>({ orders: [], totalSales: 0, totalOrders: 0 });
 
   // Settings State
-  const [shopSettings, setShopSettings] = useState({ is_open: 1, opening_hours: '', ai_prompt: '' });
+  const [shopSettings, setShopSettings] = useState({ is_open: 1, opening_hours: '', ai_prompt: '', ai_api_key: '' });
+  const [openTime, setOpenTime] = useState('09:00');
+  const [closeTime, setCloseTime] = useState('22:00');
   const [userUpdate, setUserUpdate] = useState({ role: 'kitchen', username: '', password: '' });
 
   const fetchStats = useCallback(() => {
@@ -340,7 +343,16 @@ export default function AdminDashboard() {
   const fetchShopSettings = useCallback(() => {
     fetch('/api/admin/shop/settings', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(data => setShopSettings({ is_open: data.is_open, opening_hours: data.opening_hours, ai_prompt: data.ai_prompt || '' }));
+      .then(data => {
+        setShopSettings({ is_open: data.is_open, opening_hours: data.opening_hours, ai_prompt: data.ai_prompt || '', ai_api_key: data.ai_api_key || '' });
+        if (data.opening_hours) {
+          const parts = data.opening_hours.split(' - ');
+          if (parts.length === 2) {
+            setOpenTime(parts[0]);
+            setCloseTime(parts[1]);
+          }
+        }
+      });
   }, [token]);
 
   useEffect(() => {
@@ -429,7 +441,9 @@ export default function AdminDashboard() {
   };
 
   const downloadQR = async (table: Table) => {
-    const url = `${window.location.origin}/table/${table.restaurant_id}/${table.id}`;
+    // Standardized production QR URL: /table/:tableId
+    // The backend handles the redirect to /s/:token automatically
+    const url = `${window.location.origin}/table/${table.id}`;
     const qrDataUrl = await QRCode.toDataURL(url, { width: 300 });
     const link = document.createElement('a');
     link.href = qrDataUrl;
@@ -478,10 +492,16 @@ export default function AdminDashboard() {
 
   const updateShopSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    const fullHours = `${openTime} - ${closeTime}`;
     await fetch('/api/admin/shop/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ isOpen: shopSettings.is_open, openingHours: shopSettings.opening_hours, aiPrompt: shopSettings.ai_prompt }),
+      body: JSON.stringify({ 
+        isOpen: shopSettings.is_open, 
+        openingHours: fullHours, 
+        aiPrompt: shopSettings.ai_prompt,
+        aiApiKey: shopSettings.ai_api_key 
+      }),
     });
     setSuccessMessage('Shop settings have been updated successfully.');
   };
@@ -519,44 +539,45 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-900 p-6 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
       {successMessage && (
         <SuccessPopup message={successMessage} onClose={() => setSuccessMessage('')} />
       )}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 p-2.5 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none">
-            <LayoutDashboard className="w-6 h-6 text-white" />
+      
+      {/* Sticky Top Header */}
+      <div className="sticky top-0 z-40 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 shadow-sm transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4 py-4 md:py-6 flex flex-col items-center gap-4">
+          <div className="flex items-center gap-3 group">
+            <div className="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none transition-transform group-hover:rotate-12 duration-300">
+              <LayoutDashboard className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            </div>
+            <h1 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white tracking-tight uppercase">Admin Dashboard</h1>
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Admin Dashboard</h1>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto max-w-[80vw] md:max-w-none">
-            {tabs.map(tab => (
-              <button 
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab.id 
-                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 shadow-sm' 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
+          
+          <div className="w-full max-w-2xl">
+            <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-1 shadow-inner overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-1 min-w-max px-0.5">
+                {tabs.map(tab => (
+                  <button 
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap ${
+                      activeTab === tab.id 
+                        ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md scale-100 ring-2 ring-indigo-500/10' 
+                        : 'text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <tab.icon className={`w-3.5 h-3.5 md:w-4 md:h-4 ${activeTab === tab.id ? 'fill-indigo-500/10' : ''}`} />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-
-          <button 
-            onClick={() => logout({ dashboard: 'admin' })}
-            className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-2 rounded-xl flex items-center gap-2 transition-all font-bold text-sm tracking-tight"
-          >
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
         </div>
       </div>
+
+      <div className="p-4 md:p-8 max-w-7xl mx-auto">
 
       {activeTab === 'tables' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1102,27 +1123,59 @@ export default function AdminDashboard() {
 
               <div>
                 <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Opening Hours</label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={shopSettings.opening_hours}
-                    onChange={(e) => setShopSettings({...shopSettings, opening_hours: e.target.value})}
-                    placeholder="e.g. 09:00 AM - 10:00 PM"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="relative">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 absolute left-10 top-2 z-10">Open Time</label>
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="time"
+                      value={openTime}
+                      onChange={(e) => setOpenTime(e.target.value)}
+                      className="w-full pl-10 pr-4 pt-6 pb-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors text-sm font-bold"
+                    />
+                  </div>
+                  <div className="relative">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 absolute left-10 top-2 z-10">Close Time</label>
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="time"
+                      value={closeTime}
+                      onChange={(e) => setCloseTime(e.target.value)}
+                      className="w-full pl-10 pr-4 pt-6 pb-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors text-sm font-bold"
+                    />
+                  </div>
                 </div>
               </div>
+              {/* AI Assistant Settings */}
+              <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/50 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="bg-indigo-600 p-2 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">AI Assistant Settings</h3>
+                </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">AI Assistant Prompt</label>
-                <textarea
-                  rows={4}
-                  value={shopSettings.ai_prompt}
-                  onChange={(e) => setShopSettings({...shopSettings, ai_prompt: e.target.value})}
-                  placeholder="e.g. You are a helpful restaurant assistant."
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors"
-                />
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Restaurant Details (AI Instructions)</label>
+                  <textarea
+                    rows={4}
+                    value={shopSettings.ai_prompt}
+                    onChange={(e) => setShopSettings({...shopSettings, ai_prompt: e.target.value})}
+                    placeholder="Describe your restaurant, menu highlights, and vibe for the AI assistant..."
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">AI API Key</label>
+                  <input
+                    type="password"
+                    value={shopSettings.ai_api_key}
+                    onChange={(e) => setShopSettings({...shopSettings, ai_api_key: e.target.value})}
+                    placeholder="Paste your Gemini AI API key here"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white transition-colors text-sm"
+                  />
+                </div>
               </div>
 
               <button 
@@ -1190,8 +1243,28 @@ export default function AdminDashboard() {
               </button>
             </form>
           </div>
+
+          {/* Logout Section */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-red-200 dark:border-red-900/30 col-span-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-lg">
+                <LogOut className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Logout</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Exit your admin session securely</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => logout({ dashboard: 'admin' })}
+              className="w-full md:w-auto bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200 dark:shadow-none flex items-center justify-center gap-2"
+            >
+              <LogOut className="w-5 h-5" /> Sign Out from Dashboard
+            </button>
+          </div>
         </div>
       )}
     </div>
-  );
+  </div>
+);
 }

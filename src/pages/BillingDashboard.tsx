@@ -194,7 +194,10 @@ export default function BillingDashboard() {
       const mobileNumber = "9534722845"; 
       
       const vpa = `${mobileNumber}@upi`; 
-      const amount = selectedOrder.total_amount;
+      const amount = discountPercent > 0 
+        ? (selectedOrder.total_amount * (1 - discountPercent / 100)).toFixed(2)
+        : selectedOrder.total_amount;
+        
       const note = `${selectedOrder.customer_nickname || 'Customer'} - ${selectedOrder.items.map((i) => i.name_at_time).join(', ')}`.substring(0, 50); 
       
       const upiString = `upi://pay?pa=${vpa}&pn=${encodeURIComponent(payeeName)}&am=${amount}&tn=${encodeURIComponent(note)}`;
@@ -375,9 +378,19 @@ export default function BillingDashboard() {
           </div>
 
           <div className="border-t border-dashed border-gray-300 pt-4 mb-8">
-            <div className="flex justify-between font-bold text-lg">
-              <span>TOTAL</span>
+            <div className="flex justify-between text-sm mb-1">
+              <span>Subtotal:</span>
               <span>₹{printOrder.total_amount}</span>
+            </div>
+            {((printOrder.discount_applied || 0) > 0) && (
+              <div className="flex justify-between text-sm text-green-600 mb-1">
+                <span>Discount ({printOrder.discount_applied}%):</span>
+                <span>-₹{(printOrder.total_amount * (printOrder.discount_applied || 0) / 100).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-lg border-t border-gray-100 pt-2 mt-2">
+              <span>TOTAL</span>
+              <span>₹{printOrder.final_amount || printOrder.total_amount}</span>
             </div>
             <div className="text-center text-xs text-gray-400 mt-4">
               Thank you for dining with us!
@@ -490,7 +503,11 @@ export default function BillingDashboard() {
                       <Banknote className="w-10 h-10" />
                     </div>
                     <h4 className="text-xl font-bold text-slate-800 mb-2">Cash Payment</h4>
-                    <p className="text-slate-500 mb-8">Please collect <span className="font-bold text-slate-900">₹{selectedOrder.total_amount}</span> from the customer.</p>
+                    <p className="text-slate-500 mb-8">
+                      Please collect <span className="font-bold text-slate-900 text-2xl">₹{discountPercent > 0 
+                        ? (selectedOrder.total_amount * (1 - discountPercent / 100)).toFixed(2)
+                        : selectedOrder.total_amount}</span> from the customer.
+                    </p>
                     
                     <button 
                       onClick={() => markPaid(selectedOrder.id)}

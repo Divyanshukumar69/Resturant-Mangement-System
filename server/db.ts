@@ -34,8 +34,9 @@ export function initDb() {
       lng REAL,
       radius_meters INTEGER DEFAULT 100,
       is_open BOOLEAN DEFAULT 1,
-      opening_hours TEXT DEFAULT '09:00 AM - 10:00 PM',
-      ai_prompt TEXT DEFAULT 'You are a helpful restaurant assistant.'
+      opening_hours TEXT DEFAULT '10:00 - 21:00',
+      ai_prompt TEXT DEFAULT 'You are a helpful restaurant assistant. Our restaurant is located in Dumra. We are open from 10:00 AM to 09:00 PM (10:00 - 21:00). For any urgent queries, you can reach our manager at 9798263469. Be warm and hospitable.',
+      ai_api_key TEXT
     );
   `);
   const columns = db.prepare("PRAGMA table_info(restaurants)").all();
@@ -178,6 +179,23 @@ export function initDb() {
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
   `);
+  
+  // Table Sessions (QR scanning)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      table_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      is_used BOOLEAN DEFAULT 0,
+      ip_address TEXT,
+      user_agent TEXT,
+      FOREIGN KEY(table_id) REFERENCES tables(id)
+    );
+  `);
+  
+  // Index for TTL cleanup
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);`);
 
   // Ensure default restaurant exists
 
@@ -187,7 +205,7 @@ export function initDb() {
     db.prepare("INSERT INTO restaurants (name, lat, lng, radius_meters, is_open, opening_hours) VALUES ('NextGen Software', 0, 0, 100, 1, '09:00 AM - 10:00 PM')").run();
   } else {
     // Ensure name is updated if DB exists
-    db.prepare("UPDATE restaurants SET name = 'NextGen Software' WHERE id = 1").run();
+    db.prepare("UPDATE restaurants SET name = 'NextGen Software', ai_prompt = 'You are a helpful restaurant assistant. Our restaurant is located in Dumra. We are open from 10:00 AM to 09:00 PM (10:00 - 21:00). For any urgent queries, you can reach our manager at 9798263469. Be warm and hospitable.' WHERE id = 1").run();
   }
 
   // Ensure default users exist
@@ -239,7 +257,11 @@ export function initDb() {
   } catch { /* Column likely exists */ }
 
   try {
-    db.prepare("ALTER TABLE restaurants ADD COLUMN ai_prompt TEXT DEFAULT 'You are a helpful restaurant assistant.'").run();
+    db.prepare("ALTER TABLE restaurants ADD COLUMN ai_prompt TEXT DEFAULT 'You are a helpful restaurant assistant. Our restaurant is located in Dumra. We are open from 10:00 AM to 09:00 PM (10:00 - 21:00). For any urgent queries, you can reach our manager at 9798263469. Be warm and hospitable.'").run();
+  } catch { /* Column likely exists */ }
+
+  try {
+    db.prepare("ALTER TABLE restaurants ADD COLUMN ai_api_key TEXT").run();
   } catch { /* Column likely exists */ }
 
   try {

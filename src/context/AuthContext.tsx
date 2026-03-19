@@ -7,7 +7,7 @@ interface AuthContextType {
   role: Role | null;
   restaurantId: number | null;
   login: (token: string, role: Role, restaurantId: number) => void;
-  logout: (details?: any) => Promise<void>;
+  logout: (details?: Record<string, unknown>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRestaurantId(newRestaurantId);
   };
 
-  const logout = async (details?: any) => {
+  const logout = async (details?: Record<string, unknown>) => {
     try {
       if (token) {
         await fetch('/api/logout', {

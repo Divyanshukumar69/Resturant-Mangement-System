@@ -211,24 +211,32 @@ export default function KitchenDashboard() {
           <div className="flex items-center gap-3">
              <button 
                 onClick={() => logout({ dashboard: 'kitchen' })}
-                className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 px-4 py-3 rounded-2xl flex items-center gap-2 transition-all font-bold text-xs uppercase tracking-widest mr-2"
+                className="bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-600 dark:text-slate-400 hover:text-red-500 border border-slate-200 dark:border-slate-700 hover:border-red-200 px-5 py-3 rounded-2xl flex items-center gap-2 transition-all font-bold text-xs uppercase tracking-widest"
               >
                 <LogOut className="w-4 h-4" /> Logout
               </button>
+
              {!soundEnabled ? (
                 <button 
                   onClick={enableAudio}
-                  className="bg-amber-500 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-lg animate-bounce"
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-indigo-200 dark:shadow-none"
                 >
-                  <Volume2 className="w-5 h-5" /> Activate Order Speaker
+                  <div className="relative">
+                    <Volume2 className="w-5 h-5" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-ping"></span>
+                  </div>
+                  Activate Order Speaker
                 </button>
              ) : (
-                <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-indigo-600/20 shadow-sm">
-                  <Volume2 className="w-5 h-5 text-emerald-500" />
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Speaker Live</span>
+                <div className="flex items-center gap-3 bg-white dark:bg-slate-800 px-5 py-3 rounded-2xl border-2 border-emerald-500/20 shadow-sm ring-4 ring-emerald-500/5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Speaker Live</span>
+                  </div>
                   <button 
                     onClick={() => setSoundEnabled(false)}
-                    className="ml-2 text-slate-400 hover:text-red-500 transition-colors"
+                    className="ml-2 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                    title="Disable Audio"
                   >
                     <X className="w-4 h-4" />
                   </button>

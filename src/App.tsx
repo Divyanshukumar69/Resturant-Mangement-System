@@ -31,7 +31,7 @@ export default function App() {
           <div className="flex-1">
             <Routes>
               <Route path="/" element={<Login />} />
-              <Route path="/table/:restaurantId/:tableId" element={<CustomerTable />} />
+              <Route path="/s/:token" element={<CustomerTable />} />
               <Route path="/landing/:restaurantId" element={<LandingPage />} />
 
               <Route path="/admin" element={

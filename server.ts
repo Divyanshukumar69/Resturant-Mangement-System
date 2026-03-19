@@ -9,6 +9,7 @@ import db, { initDb } from './server/db.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import dotenv from "dotenv";
+import crypto from 'crypto';
 dotenv.config();
 
 
@@ -51,6 +52,8 @@ interface Table {
   radius_meters?: number;
   is_open?: number;
   opening_hours?: string;
+  ai_prompt?: string;
+  ai_api_key?: string;
 }
 
 interface Category {
@@ -258,10 +261,84 @@ async function startServer() {
   // Public: Get Restaurant & Table Info
   app.get('/api/public/table/:tableId', (req: Request, res: Response) => {
     const { tableId } = req.params;
-    const table = db.prepare('SELECT t.*, r.name as restaurant_name, r.lat, r.lng, r.radius_meters, r.is_open, r.opening_hours, r.ai_prompt FROM tables t JOIN restaurants r ON t.restaurant_id = r.id WHERE t.id = ?').get(tableId) as Table | undefined;
+    const table = db.prepare('SELECT t.*, r.name as restaurant_name, r.lat, r.lng, r.radius_meters, r.is_open, r.opening_hours, r.ai_prompt, r.ai_api_key FROM tables t JOIN restaurants r ON t.restaurant_id = r.id WHERE t.id = ?').get(tableId) as Table | undefined;
 
     if (!table) return res.status(404).json({ error: 'Table not found' });
     res.json(table);
+  });
+  
+  // Final Entry Point (QR Scan Catch-all to Token Conversion)
+  app.get(['/table/:tableId', '/table/:restaurantId/:tableId'], (req: Request, res: Response) => {
+    const tableId = req.params.tableId;
+    console.log(`[QR Scan] entry: ${req.url} -> tableId: ${tableId}`);
+    
+    if (!tableId) return res.status(404).send('Table not specified');
+
+    // Security Check: Table must exist
+    const table = db.prepare('SELECT id FROM tables WHERE id = ?').get(tableId);
+    if (!table) {
+      return res.status(404).send('Table ID not valid for this restaurant');
+    }
+
+    // Generate secure random token (32 bytes = 64 chars hex)
+    const token = crypto.randomBytes(32).toString('hex');
+    
+    // Set expiry (15 mins from now)
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    
+    try {
+      db.prepare(`
+        INSERT INTO sessions (token, table_id, expires_at, ip_address, user_agent)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(token, tableId, expiresAt, req.ip, req.headers['user-agent']);
+      
+      // Force immediate redirect to High-Security frontend route
+      res.redirect(`/s/${token}`);
+    } catch (err) {
+      console.error('[Session Error]', err);
+      res.status(500).send('Security generation failed. Please refresh.');
+    }
+  });
+
+  // Alias for legacy API calls
+  app.get('/api/public/table/session/:tableId', (req: Request, res: Response) => {
+    res.redirect(`/table/${req.params.tableId}`);
+  });
+
+  // Public: Validate Session Token
+  app.get('/api/public/session/validate/:token', (req: Request, res: Response) => {
+    const { token } = req.params;
+    
+    // Check token existence, expiry, and usage
+    // Using UTC (datetime('now')) to match the ISO string stored in expires_at
+    const session = db.prepare(`
+      SELECT s.*, t.restaurant_id, t.name as table_name, t.id as table_id
+      FROM sessions s
+      JOIN tables t ON s.table_id = t.id
+      WHERE s.token = ? AND datetime(s.expires_at) > datetime('now') AND s.is_used = 0
+    `).get(token) as { 
+      token: string; 
+      table_id: number; 
+      restaurant_id: number; 
+      table_name: string; 
+      expires_at: string; 
+      is_used: number; 
+    } | undefined;
+
+    if (!session) {
+      console.warn(`[Session Validation] FAIL: Invalid or expired token: ${token.substring(0, 10)}...`);
+      return res.status(410).json({ error: 'Session expired or invalid. Please re-scan QR code.' });
+    }
+    
+    console.log(`[Session Validation] SUCCESS: Table ${session.table_name} (ID: ${session.table_id})`);
+
+    // Optional: Log validation activity
+    res.json({
+      success: true,
+      tableId: session.table_id,
+      restaurantId: session.restaurant_id,
+      tableName: session.table_name
+    });
   });
 
   // Public: Get Menu
@@ -658,19 +735,19 @@ async function startServer() {
   // Admin: Shop Status
   app.post('/api/admin/shop/status', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
     if (!req.user || req.user.role !== 'admin') return res.sendStatus(403);
-    const { isOpen, openingHours, aiPrompt } = req.body;
+    const { isOpen, openingHours, aiPrompt, aiApiKey } = req.body;
 
-    db.prepare('UPDATE restaurants SET is_open = ?, opening_hours = ?, ai_prompt = ? WHERE id = ?')
-      .run(isOpen ? 1 : 0, openingHours, aiPrompt, req.user.restaurant_id);
+    db.prepare('UPDATE restaurants SET is_open = ?, opening_hours = ?, ai_prompt = ?, ai_api_key = ? WHERE id = ?')
+      .run(isOpen ? 1 : 0, openingHours, aiPrompt, aiApiKey, req.user.restaurant_id);
 
-    io.emit('shop_status_updated', { isOpen, openingHours, aiPrompt });
+    io.emit('shop_status_updated', { isOpen, openingHours, aiPrompt, aiApiKey });
     res.json({ success: true });
   });
 
   // Admin: Get Shop Settings
   app.get('/api/admin/shop/settings', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
     if (!req.user) return res.sendStatus(403);
-    const restaurant = db.prepare('SELECT is_open, opening_hours, ai_prompt FROM restaurants WHERE id = ?').get(req.user.restaurant_id);
+    const restaurant = db.prepare('SELECT is_open, opening_hours, ai_prompt, ai_api_key FROM restaurants WHERE id = ?').get(req.user.restaurant_id);
     res.json(restaurant);
   });
 
@@ -745,9 +822,13 @@ async function startServer() {
         appType: 'spa',
       });
 
-      // Use Vite middlewares **after** your API routes so /api/* and /socket.io/ are not intercepted
+      // Use Vite middlewares **after** your API routes so /api/*, /table/* and /socket.io/ are not intercepted
       app.use((req, res, next) => {
-        if (req.originalUrl.startsWith('/api/') || req.originalUrl.startsWith('/socket.io/')) {
+        if (
+          req.path.startsWith('/api/') || 
+          req.path.startsWith('/table/') || 
+          req.path.startsWith('/socket.io/')
+        ) {
           return next();
         }
         vite.middlewares(req, res, next);
@@ -768,6 +849,18 @@ async function startServer() {
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
+  
+  // Cleanup Background Task: Sessions
+  setInterval(() => {
+    try {
+      const info = db.prepare("DELETE FROM sessions WHERE datetime(expires_at) < datetime('now', 'localtime')").run();
+      if (info.changes > 0) {
+        console.log(`[Cleanup] Purged ${info.changes} expired sessions.`);
+      }
+    } catch (err) {
+      console.error('[Cleanup Error] Session purge failed:', err);
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
 }
 
 startServer();

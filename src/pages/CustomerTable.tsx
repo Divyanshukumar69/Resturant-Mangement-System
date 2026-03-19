@@ -22,7 +22,7 @@ interface Restaurant {
 }
 
 export default function CustomerTable() {
-  const { tableId } = useParams();
+  const { tableId, token: urlToken } = useParams();
   const socket = useSocket();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,7 +64,8 @@ export default function CustomerTable() {
     setChatLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      // Prioritize dynamic AI key from restaurant settings, fallback to environment vars
+      const apiKey = restaurant?.ai_api_key || import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not set');
       }
@@ -79,14 +80,15 @@ export default function CustomerTable() {
       - If they ask something unrelated to the restaurant, politely decline.`;
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+        model: "gemini-1.5-flash", // Corrected model name
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
       });
       
-      setChatMessages(prev => [...prev, { role: 'ai', text: response.text || "Sorry, I couldn't generate a response." }]);
+      const text = response.text || "Sorry, I couldn't generate a response.";
+      setChatMessages(prev => [...prev, { role: 'ai', text }]);
     } catch (err) {
       console.error('DEBUG: Chat error:', err);
-      setChatMessages(prev => [...prev, { role: 'ai', text: "Sorry, I'm having trouble connecting right now." }]);
+      setChatMessages(prev => [...prev, { role: 'ai', text: "Sorry, I'm having trouble connecting to the AI. Please check if your API key is correct in Admin Settings." }]);
     } finally {
       setChatLoading(false);
     }
@@ -138,41 +140,55 @@ export default function CustomerTable() {
 
   // Fetch Table & Restaurant Info
   useEffect(() => {
-    fetch(`/api/public/table/${tableId}`)
-      .then(res => res.ok ? res.json() : Promise.reject('Invalid Table'))
-      .then(data => {
+    setLoading(true);
+    
+    const fetchInfo = async () => {
+      try {
+        let finalTableId = tableId;
+        
+        // If accessed via secure token, validate first
+        if (urlToken) {
+          const valRes = await fetch(`/api/public/session/validate/${urlToken}`);
+          if (!valRes.ok) {
+            const errData = await valRes.json();
+            throw new Error(errData.error || 'Session expired or invalid. Please re-scan QR code.');
+          }
+          const sessionData = await valRes.json();
+          finalTableId = sessionData.tableId;
+        }
+
+        if (!finalTableId) throw new Error('Table ID missing');
+
+        // Fetch Restaurant & Table Details
+        const res = await fetch(`/api/public/table/${finalTableId}`);
+        if (!res.ok) throw new Error('Invalid Table or Session');
+        const data = await res.json();
+        
         setRestaurant(data);
         
         if (socket) {
           const joinRoom = () => {
              socket.emit('join_restaurant', data.restaurant_id);
           };
-          
-          if (socket.connected) {
-            joinRoom();
-          }
-          
+          if (socket.connected) joinRoom();
           socket.on('connect', joinRoom);
-          
-          // Store cleanup function in a way we can return it
-          return { data, joinRoom };
         }
-        return { data, joinRoom: null };
-      })
-      .then(({ data }) => {
-        return fetch(`/api/public/menu/${data.restaurant_id}`)
-          .then(res => res.json())
-          .then(menuData => {
-             setMenu(menuData);
-             if (menuData.length > 0) setActiveCategory(menuData[0].id);
-             setLoading(false);
-          });
-      })
-      .catch(err => {
-        setError(err.toString());
+
+        // Fetch Menu
+        const menuRes = await fetch(`/api/public/menu/${data.restaurant_id}`);
+        const menuData = await menuRes.json();
+        setMenu(menuData);
+        if (menuData.length > 0) setActiveCategory(menuData[0].id);
+        
+      } catch (err: any) {
+        setError(err.message || 'Something went wrong. Please try again.');
+      } finally {
         setLoading(false);
-      });
-  }, [tableId, socket]);
+      }
+    };
+
+    fetchInfo();
+  }, [tableId, urlToken, socket]);
 
   // Listen for menu updates
   useEffect(() => {
@@ -267,22 +283,87 @@ export default function CustomerTable() {
   );
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900 dark:text-white">Loading...</div>;
-  if (error) return <div className="min-h-screen flex items-center justify-center text-red-500 bg-white dark:bg-slate-900">{error}</div>;
-
-  // Shop Closed Check
-  if (restaurant && !restaurant.is_open) {
+  if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-white dark:bg-slate-900">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 max-w-sm w-full">
-          <Store className="w-16 h-16 text-slate-400 mb-4 mx-auto" />
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Shop is Closed</h2>
-          <p className="text-slate-600 dark:text-slate-400 mb-6">We are currently closed for orders. Please check back later.</p>
-          
-          <div className="bg-slate-50 dark:bg-slate-700 px-4 py-3 rounded-lg border border-slate-100 dark:border-slate-600">
-            <p className="text-xs font-bold text-slate-400 dark:text-slate-300 uppercase tracking-wider mb-1">Opening Hours</p>
-            <p className="text-lg font-bold text-slate-800 dark:text-white">{restaurant.opening_hours || '09:00 AM - 10:00 PM'}</p>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 text-center">
+        <div className="max-w-md bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl border border-red-100 dark:border-red-900/30">
+          <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+             <X className="w-10 h-10 text-red-600 dark:text-red-400" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-4">Something went wrong</h2>
+          <p className="text-slate-600 dark:text-slate-400 font-medium mb-8 leading-relaxed">
+            {error}
+          </p>
+          <div className="space-y-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Need help?</p>
+            <a 
+              href="tel:9798263469"
+              className="flex items-center justify-center gap-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-bold transition-all shadow-lg active:scale-95"
+            >
+              Call Manager: 9798263469
+            </a>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  const isTimeWithinRange = () => {
+    if (!restaurant?.opening_hours) return true;
+    const parts = restaurant.opening_hours.split(' - ');
+    if (parts.length !== 2) return true;
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    const [openH, openM] = parts[0].split(':').map(Number);
+    const [closeH, closeM] = parts[1].split(':').map(Number);
+
+    const openTotal = openH * 60 + openM;
+    const closeTotal = closeH * 60 + closeM;
+
+    if (closeTotal < openTotal) {
+      // Over midnight case
+      return currentTime >= openTotal || currentTime <= closeTotal;
+    }
+    return currentTime >= openTotal && currentTime <= closeTotal;
+  };
+
+  const isShopOpen = restaurant?.is_open && isTimeWithinRange();
+
+  // Shop Closed Check
+  if (restaurant && !isShopOpen) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-50 dark:bg-slate-950">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-sm w-full"
+        >
+          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Store className="w-10 h-10 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">Currently Closed</h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-8 font-medium">Sorry! We're not accepting orders at the moment. Please visit us during our opening hours.</p>
+          
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-8">
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Our Timing</p>
+            <div className="flex items-center justify-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-lg">
+              <span>{restaurant.opening_hours || '09:00 - 22:00'}</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Urgent? Need Help?</p>
+            <a 
+              href="tel:9798263469"
+              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-3"
+            >
+              Call Manager
+            </a>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">+91 9798263469</p>
+          </div>
+        </motion.div>
       </div>
     );
   }
